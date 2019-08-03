@@ -1,1 +1,1 @@
-# gpu-voltage-control
+Here is a simple JS script that controls Nvidia GPU core voltage depending on its current temperature. It works in Windows and relies on two external utilities: nvidia-smi (https://developer.nvidia.com/nvidia-system-management-interface) and NvidiaInspector (https://www.nvidiainspector.com/)
