@@ -12,9 +12,9 @@ const maxVoltage = [925000]; // maximum voltage
 const startVoltage = [850000]; // set this voltage on startup
 const targetTemperature = [60]; // keep this temperature
 
-const baseClockOffset = [160];
-const memoryClockOffset = [200];
-const clockOffsetTimeout = 1 * 60 * 1000; // 1 minute
+const baseClockOffset = [160]; // base clock offset
+const memoryClockOffset = [200]; // memory clock offset
+const clockOffsetTimeout = 10 * 60 * 1000; // apply base/memory clock offset after 10 minutes
 
 const Kp = 0.1; // proportional coefficient for voltage control (0.1 step / 1 degree)
 
