@@ -3,6 +3,8 @@ const { execFileSync } = require('child_process');
 const nvidiaSMI = 'nvidia-smi'; // full path to nvidia-smi
 const nvidiaInspector = 'nvidiainspector'; // full path to NvidiaInspector
 
+const devices = []; // list of GPU indexes to control, 0-based, empty = all
+
 const voltageUpdateInterval = 1 * 1000; // update every second
 const voltageStep = 6250; // voltage changes applied in steps
 
@@ -49,25 +51,30 @@ function getTemperatures() {
 }
 
 function setVoltage(microVolts) {
-    const args = microVolts.map((v, gpuIndex) => {
+    const args = microVolts.map((v, i) => {
+        const gpuIndex = devices[i] || i;
         return `-lockVoltagePoint:${gpuIndex},${v.toFixed(0)}`;
     });
     apply(args);
 }
 
 function setClockOffset(baseClockOffset, memoryClockOffset) {
-    const args = baseClockOffset.map((offset, gpuIndex) => {
+    const args = baseClockOffset.map((offset, i) => {
+        const gpuIndex = devices[i] || i;
         return `-setBaseClockOffset:${gpuIndex},0,${offset}`; // pstateld=0
-    }).concat(memoryClockOffset.map((offset, gpuIndex) => {
+    }).concat(memoryClockOffset.map((offset, i) => {
+        const gpuIndex = devices[i] || i;
         return `-setMemoryClockOffset:${gpuIndex},0,${offset}`;
     }));
     apply(args);
 }
 
 
-const gpus = listGPU();
+const gpus = listGPU()
+    .filter((_, i) => (devices.length === 0) || devices.includes(i));
+
 if (gpus.length === 0) {
-    console.error('No GPU found');
+    console.error('No GPU available');
     process.exit(1);
 }
 
@@ -84,21 +91,26 @@ function roundVoltageToStep(uV) {
 
 function updateVoltage() {
 
-    const temperatures = getTemperatures();
+    const temperatures = getTemperatures()
+        .filter((_, i) => (devices.length === 0) || devices.includes(i));
+
+    if (temperatures.length === 0) {
+        return; // no devices, just in case
+    }
 
     if (currentVoltage.length === 0) {
         // First time
-        currentVoltage = temperatures.map((_, gpuIndex) => roundVoltageToStep(startVoltage[gpuIndex]));
+        currentVoltage = temperatures.map((_, i) => roundVoltageToStep(startVoltage[i]));
         setVoltage(currentVoltage);
     } else {
-        const newVoltage = temperatures.map((currentTemperature, gpuIndex) => {
-            const dT = targetTemperature[gpuIndex] - currentTemperature;
+        const newVoltage = temperatures.map((currentTemperature, i) => {
+            const dT = targetTemperature[i] - currentTemperature;
             const dV = Math.round(dT * Kp * voltageStep);
-            const newV = Math.min(Math.max(currentVoltage[gpuIndex] + dV, minVoltage[gpuIndex]), maxVoltage[gpuIndex]);
-            console.log(`#${gpuIndex}: T = ${currentTemperature}, Vcurr = ${currentVoltage[gpuIndex]} uV, dT = ${dT.toString().padStart(2)}, dV = ${dV.toString().padStart(5)}, Vnew = ${newV} uV`);
+            const newV = Math.min(Math.max(currentVoltage[i] + dV, minVoltage[i]), maxVoltage[i]);
+            console.log(`#${devices[i] || i}: T = ${currentTemperature}, Vcurr = ${currentVoltage[i]} uV, dT = ${dT.toString().padStart(2)}, dV = ${dV.toString().padStart(5)}, Vnew = ${newV} uV`);
             return newV;
         });
-        const changed = (newVoltage.findIndex((newV, gpuIndex) => roundVoltageToStep(newV) !== roundVoltageToStep(currentVoltage[gpuIndex])) >= 0);
+        const changed = (newVoltage.findIndex((newV, i) => roundVoltageToStep(newV) !== roundVoltageToStep(currentVoltage[i])) >= 0);
         if (changed) {
             setVoltage(newVoltage.map(newV => roundVoltageToStep(newV)));
         }
