@@ -95,7 +95,7 @@ function updateVoltage() {
             const dT = targetTemperature[gpuIndex] - currentTemperature;
             const dV = Math.round(dT * Kp * voltageStep);
             const newV = Math.min(Math.max(currentVoltage[gpuIndex] + dV, minVoltage[gpuIndex]), maxVoltage[gpuIndex]);
-            console.log(`#${gpuIndex}: T = ${currentTemperature}, Vcurr = ${currentVoltage[gpuIndex]} uV, dT = ${dT}, dV = ${dV}, Vnew = ${newV} uV`);
+            console.log(`#${gpuIndex}: T = ${currentTemperature}, Vcurr = ${currentVoltage[gpuIndex]} uV, dT = ${dT.toString().padStart(2)}, dV = ${dV.toString().padStart(5)}, Vnew = ${newV} uV`);
             return newV;
         });
         const changed = (newVoltage.findIndex((newV, gpuIndex) => roundVoltageToStep(newV) !== roundVoltageToStep(currentVoltage[gpuIndex])) >= 0);
