@@ -5,7 +5,7 @@ const nvidiaInspector = 'nvidiainspector'; // full path to NvidiaInspector
 
 const devices = []; // list of GPU indexes to control, 0-based, empty = all
 
-const voltageUpdateInterval = 1 * 1000; // update every second
+const voltageUpdateInterval = 5 * 1000; // update every 5 seconds
 const voltageStep = 6250; // voltage changes applied in steps
 
 // the following values are set per GPU
@@ -43,29 +43,36 @@ function apply(args) {
 }
 
 function listGPU() {
-    return query('gpu_name');
+    return query('index', index => parseInt(index));
 }
 
 function getTemperatures() {
     return query('temperature.gpu', temperature => parseInt(temperature));
 }
 
-function setVoltage(microVolts) {
-    const args = microVolts.map((v, i) => {
-        const gpuIndex = devices[i] || i;
-        return `-lockVoltagePoint:${gpuIndex},${v.toFixed(0)}`;
+function setVoltage(gpus, microVolts) {
+    const args = [];
+    gpus.forEach((gpuIndex, i) => {
+        const uV = microVolts[i] || microVolts[0];
+        if (uV) {
+            args.push(`-lockVoltagePoint:${gpuIndex},${uV.toFixed(0)}`);
+        }
     });
     apply(args);
 }
 
-function setClockOffset(baseClockOffset, memoryClockOffset) {
-    const args = baseClockOffset.map((offset, i) => {
-        const gpuIndex = devices[i] || i;
-        return `-setBaseClockOffset:${gpuIndex},0,${offset}`; // pstateld=0
-    }).concat(memoryClockOffset.map((offset, i) => {
-        const gpuIndex = devices[i] || i;
-        return `-setMemoryClockOffset:${gpuIndex},0,${offset}`;
-    }));
+function setClockOffset(gpus, baseClockOffset, memoryClockOffset) {
+    const args = [];
+    gpus.forEach((gpuIndex, i) => {
+        const baseOffset = baseClockOffset[i] || baseClockOffset[0];
+        if (baseOffset) {
+            args.push(`-setBaseClockOffset:${gpuIndex},0,${baseOffset}`); // pstateld=0
+        }
+        const memOffset = memoryClockOffset[i] || memoryClockOffset[0];
+        if (memOffset) {
+            args.push(`-setMemoryClockOffset:${gpuIndex},0,${memOffset}`);
+        }
+    });
     apply(args);
 }
 
@@ -79,7 +86,7 @@ if (gpus.length === 0) {
 }
 
 setTimeout(() => {
-    setClockOffset(baseClockOffset, memoryClockOffset);
+    setClockOffset(gpus, baseClockOffset, memoryClockOffset);
 }, clockOffsetTimeout);
 
 
@@ -100,19 +107,20 @@ function updateVoltage() {
 
     if (currentVoltage.length === 0) {
         // First time
-        currentVoltage = temperatures.map((_, i) => roundVoltageToStep(startVoltage[i]));
-        setVoltage(currentVoltage);
+        currentVoltage = gpus.map((_, i) => roundVoltageToStep(startVoltage[i] || startVoltage[0]));
+        setVoltage(gpus, currentVoltage);
     } else {
-        const newVoltage = temperatures.map((currentTemperature, i) => {
-            const dT = targetTemperature[i] - currentTemperature;
+        const newVoltage = gpus.map((gpuIndex, i) => {
+            const currentTemperature = temperatures[i];
+            const dT = (targetTemperature[i] || targetTemperature[0]) - currentTemperature;
             const dV = Math.round(dT * Kp * voltageStep);
-            const newV = Math.min(Math.max(currentVoltage[i] + dV, minVoltage[i]), maxVoltage[i]);
-            console.log(`#${devices[i] || i}: T = ${currentTemperature}, Vcurr = ${currentVoltage[i]} uV, dT = ${dT.toString().padStart(2)}, dV = ${dV.toString().padStart(5)}, Vnew = ${newV} uV`);
+            const newV = Math.min(Math.max(currentVoltage[i] + dV, minVoltage[i] || minVoltage[0]), maxVoltage[i] || maxVoltage[0]);
+            console.log(`#${gpuIndex}: T = ${currentTemperature}, Vcurr = ${currentVoltage[i]} uV, dT = ${dT.toString().padStart(2)}, dV = ${dV.toString().padStart(5)}, Vnew = ${newV} uV`);
             return newV;
         });
         const changed = (newVoltage.findIndex((newV, i) => roundVoltageToStep(newV) !== roundVoltageToStep(currentVoltage[i])) >= 0);
         if (changed) {
-            setVoltage(newVoltage.map(newV => roundVoltageToStep(newV)));
+            setVoltage(gpus, newVoltage.map(newV => roundVoltageToStep(newV)));
         }
 
         currentVoltage = newVoltage;
